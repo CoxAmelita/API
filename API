@@ -1,0 +1,44 @@
+
+**Code** (`src/main.rs`):
+```rust
+use actix_web::{web, App, HttpServer, Responder, HttpResponse};
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+
+#[derive(Serialize, Deserialize)]
+struct Item {
+    id: u32,
+    name: String,
+}
+
+struct AppState {
+    items: Mutex<Vec<Item>>,
+}
+
+async fn get_items(data: web::Data<AppState>) -> impl Responder {
+    let items = data.items.lock().unwrap();
+    HttpResponse::Ok().json(&*items)
+}
+
+async fn create_item(data: web::Data<AppState>, item: web::Json<Item>) -> impl Responder {
+    let mut items = data.items.lock().unwrap();
+    items.push(item.into_inner());
+    HttpResponse::Created().finish()
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let state = web::Data::new(AppState {
+        items: Mutex::new(Vec::new()),
+    });
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(state.clone())
+            .route("/items", web::get().to(get_items))
+            .route("/items", web::post().to(create_item))
+    })
+    .bind("127.0.0.1:8080")?
+    .run()
+    .await
+}
